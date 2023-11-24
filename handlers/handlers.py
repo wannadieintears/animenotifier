@@ -6,6 +6,7 @@ from aiogram import F, Router
 import asyncpg
 from aiogram.fsm.context import FSMContext
 from utils.states import Add_next_message, Delete_next_message
+from bs4 import BeautifulSoup as bs
 
 router = Router()
 
@@ -83,6 +84,18 @@ async def show(message: Message):
         titles = '\n'.join([title['title'] for title in titles])
         await message.answer(f"Your titles: {titles}", reply_markup=keyboards.kb)
     await connect.close()
+
+
+@router.message(F.text.lower() == "parse")
+async def parse(message: Message):
+    url = "https://gogoanimehd.io"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url=url) as response:
+            html = await response.text()
+            soup = bs(html, "html.parser")
+            title = soup.find('p', class_="name").text
+            episode = soup.find('p', class_="episode").text
+    await message.answer(f"The {episode} of {title} is out!")
 
 
 @router.message()
