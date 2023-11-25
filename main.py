@@ -3,11 +3,10 @@ from aiogram import Bot, Dispatcher
 import settings
 from handlers import handlers
 
+bot = Bot(settings.token)
+dp = Dispatcher()
 
 async def main():
-    bot = Bot(settings.token)
-    dp = Dispatcher()
-
     dp.include_routers(
         handlers.router
     )

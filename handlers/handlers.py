@@ -7,12 +7,14 @@ import asyncpg
 from aiogram.fsm.context import FSMContext
 from utils.states import Add_next_message, Delete_next_message
 from bs4 import BeautifulSoup as bs
+import asyncio
+from main import bot
 
 router = Router()
 
 @router.message(F.text.lower() == "/start")
 async def start(message: Message):
-    await message.answer("I'm bot for notifications of then ew anime episodes on gogoanimehd.io!",
+    await message.answer("I'm bot for notifications of then ew anime episodes on gogoanimes.to!",
                          reply_markup=keyboards.kb)
 
 
@@ -36,22 +38,29 @@ async def add_title(message: Message, state: FSMContext):
         database=settings.database
     )
 
-    query = f"INSERT INTO titles (user_id, title) VALUES ({message.from_user.id}, '{message.text}');"
+    query1 = f"INSERT INTO titles (user_id, title) VALUES ({message.from_user.id}, '{message.text}');"
+    query2 = f"SELECT * FROM titles WHERE user_id = {message.from_user.id};"
+    query3 = f"INSERT INTO titles (user_id, title, notification) VALUES" \
+             f" ({message.from_user.id}, '{message.text}', 1);"
+
     async with connect.transaction():
-        await connect.execute(query)
-        await message.answer(f"{message.text} is successfully added", reply_markup=keyboards.kb)
+        notification = await connect.fetch(query2)[0]['notification']
+        if notification == 1:
+            await connect.execute(query3)
+        else:
+            await connect.execute(query1)
     await connect.close()
 
 
 @router.message(F.text.lower() == "delete a title")
-async def get_add_title(message: Message, state: FSMContext):
+async def get_delete_title(message: Message, state: FSMContext):
     await state.set_state(Delete_next_message.mes)
     await message.answer("Tell me what a title do you wanna delete? Please, write in the exact way"
                          " how the title is written in database!")
 
 
 @router.message(Delete_next_message.mes)
-async def add_title(message: Message, state: FSMContext):
+async def delete_title(message: Message, state: FSMContext):
     await state.update_data(mes=message.text)
     await state.clear()
 
@@ -64,6 +73,7 @@ async def add_title(message: Message, state: FSMContext):
     )
 
     query = f"DELETE FROM titles WHERE user_id = {message.from_user.id} AND title = '{message.text}';"
+
     async with connect.transaction():
         await connect.execute(query)
         await message.answer(f"{message.text} is successfully deleted", reply_markup=keyboards.kb)
@@ -81,6 +91,7 @@ async def show(message: Message):
     )
 
     query = f"SELECT * FROM titles WHERE user_id = {message.from_user.id};"
+
     async with connect.transaction():
         titles = await connect.fetch(query)
         titles = '\n'.join([title['title'] for title in titles])
@@ -99,6 +110,7 @@ async def set_on(message: Message):
     )
 
     query = f"UPDATE titles SET notification = 1 WHERE user_id = {message.from_user.id};"
+
     async with connect.transaction():
         await connect.execute(query)
         await message.answer("Notifications are successfully turned on!", reply_markup=keyboards.kb)
@@ -116,6 +128,7 @@ async def set_on(message: Message):
     )
 
     query = f"UPDATE titles SET notification = 0 WHERE user_id = {message.from_user.id};"
+
     async with connect.transaction():
         await connect.execute(query)
         await message.answer("Notifications are successfully turned off!", reply_markup=keyboards.kb)
@@ -124,14 +137,41 @@ async def set_on(message: Message):
 
 @router.message(F.text.lower() == "parse")
 async def parse(message: Message):
-    url = "https://gogoanimehd.io"
+    url = "https://gogoanimes.to"
     async with aiohttp.ClientSession() as session:
-        async with session.get(url=url) as response:
+        async with session.get(url) as response:
             html = await response.text()
             soup = bs(html, "html.parser")
             title = soup.find('p', class_="name").text
             episode = soup.find('p', class_="episode").text
-    await message.answer(f"{episode} of {title} is out!")
+
+    connect = await asyncpg.connect(
+        host=settings.host,
+        port=settings.port,
+        user=settings.user,
+        password=settings.password,
+        database=settings.database
+    )
+
+    query1 = f"SELECT * FROM last WHERE id = 1;"
+    query2 = f"SELECT * FROM titles WHERE title = '{title}' AND notification = 1;"
+    query3 = f"UPDATE last SET last = {title} WHERE id = 1;"
+
+    async with connect.transaction():
+        last = await connect.fetch(query1)['last']
+        users = await connect.fetch(query2)
+        users = [user['user_id'] for user in users]
+        print(last)
+        print(users)
+
+        if title != last:
+            async for user in users:
+                await bot.send_message(user, f"{episode} of {title} is out!", reply_markup=keyboards.kb)
+                await connect.execute(query3)
+
+    await connect.close()
+    await asyncio.sleep(5)
+    await parse(message)
 
 
 @router.message()
