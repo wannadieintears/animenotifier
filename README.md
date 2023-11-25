@@ -54,4 +54,5 @@ ALTER TABLE IF EXISTS public.last
 ```
 pip install aiogram, asyncpg, bs4
 ```
-6. Create and fill settings.py with: token, host, port, database, user, password 
+6. Create and fill settings.py with: token, host, port, database, user, password
+7. Don't forget to write 'parse' to bot (I don't know how to start parsing by default :( )!
