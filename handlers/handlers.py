@@ -38,17 +38,23 @@ async def add_title(message: Message, state: FSMContext):
         database=settings.database
     )
 
-    query1 = f"INSERT INTO titles (user_id, title) VALUES ({message.from_user.id}, '{message.text}');"
+    replaced = message.text.replace("'", "")
+    query1 = f"INSERT INTO titles (user_id, title) VALUES ({message.from_user.id}, '{replaced}')"
     query2 = f"SELECT * FROM titles WHERE user_id = {message.from_user.id};"
     query3 = f"INSERT INTO titles (user_id, title, notification) VALUES" \
              f" ({message.from_user.id}, '{message.text}', 1);"
 
     async with connect.transaction():
-        notification = await connect.fetch(query2)[0]['notification']
-        if notification == 1:
-            await connect.execute(query3)
+        notification = await connect.fetch(query2)
+        if 'notification' in notification:
+            notification = notification[0]['notification']
+            if notification == 1:
+                await connect.execute(query3)
+            else:
+                await connect.execute(query1)
         else:
             await connect.execute(query1)
+        await message.answer(f"{replaced} is successfully added!", reply_markup=keyboards.kb)
     await connect.close()
 
 
@@ -153,21 +159,21 @@ async def parse(message: Message):
         database=settings.database
     )
 
+    replaced = title.replace("'", "")
     query1 = f"SELECT * FROM last WHERE id = 1;"
-    query2 = f"SELECT * FROM titles WHERE title = '{title}' AND notification = 1;"
-    query3 = f"UPDATE last SET last = {title} WHERE id = 1;"
+    query2 = f"SELECT * FROM titles WHERE title = '{replaced}' AND notification = 1;"
+    query3 = f"UPDATE last SET last = '{replaced}' WHERE id = 1;"
 
     async with connect.transaction():
-        last = await connect.fetch(query1)['last']
+        last = await connect.fetch(query1)
+        last = last[0]['last']
         users = await connect.fetch(query2)
         users = [user['user_id'] for user in users]
-        print(last)
-        print(users)
 
-        if title != last:
-            async for user in users:
-                await bot.send_message(user, f"{episode} of {title} is out!", reply_markup=keyboards.kb)
-                await connect.execute(query3)
+        if replaced != last:
+            for user in users:
+                await bot.send_message(user, f"{episode} of {replaced} is out!", reply_markup=keyboards.kb)
+            await connect.execute(query3)
 
     await connect.close()
     await asyncio.sleep(5)
